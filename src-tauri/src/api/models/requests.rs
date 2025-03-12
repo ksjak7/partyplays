@@ -1,12 +1,12 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateControllersRequest {
-  pub number_of_controllers: u8,
+    pub number_of_controllers: u8,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct HandleActionRequest {
-  pub controller_id: String,
-  pub action_id: String,
+    pub controller_id: String,
+    pub action_id: String,
 }
