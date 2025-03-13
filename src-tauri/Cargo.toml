@@ -29,4 +29,3 @@ tower-http = { version = "0.6.2", features = ["cors"] }
 thiserror = "2.0.12"
 vigem-client = "0.1.4"
 axum-macros = "0.5.0"
-
