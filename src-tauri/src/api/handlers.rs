@@ -1,18 +1,16 @@
-use std::{sync::Arc, thread::sleep, time::Duration};
+use std::{net::SocketAddr, sync::Arc, thread::sleep, time::Duration};
 
 use axum::{
-    extract::State,
+    extract::{ws::{Message, WebSocket}, ConnectInfo, State, WebSocketUpgrade},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use nanoid::nanoid;
+use tokio::spawn;
 use vigem_client::{TargetId, XButtons, XGamepad, Xbox360Wired};
 
-use super::models::{
-    appstate::AppState,
-    requests::{CreateControllersRequest, HandleActionRequest},
-};
+use super::models::{appstate::AppState, requests::CreateControllersRequest};
 
 pub async fn create_controllers(
     State(state): State<Arc<AppState>>,
@@ -64,52 +62,90 @@ pub async fn get_controller_ids(State(state): State<Arc<AppState>>) -> Json<Vec<
     }
 }
 
-pub async fn handle_action(
+pub async fn ws_controller_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<HandleActionRequest>,
-) -> Response {
-    println!("{} :: {}", payload.controller_id, payload.action_id);
+    ws: WebSocketUpgrade,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> impl IntoResponse {
+    println!("Connected at {addr}");
 
-    let action_id = payload.action_id.to_ascii_lowercase();
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+}
+
+pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+    spawn(async move {
+        while let Some(Ok(msg)) = socket.recv().await {
+            let text = match msg.into_text() {
+                Ok(t) => t,
+                _ => {
+                    println!("unable to convert message to text");
+                    return;
+                }
+            };
+
+            let mut msg_parts = text.split("::");
+
+            let controller_id = match msg_parts.next() {
+                Some(t) => String::from(t),
+                _ => {
+                    println!("unable to find controller_id");
+                    return;
+                }
+            };
+
+            let action_id = match msg_parts.next() {
+                Some(t) => String::from(t),
+                _ => {
+                    println!("unable to find action_id");
+                    return;
+                }
+            };
+
+            handle_action(state.clone(), controller_id, action_id).await;
+        }
+    });
+}
+
+pub async fn handle_action(state: Arc<AppState>, controller_id: String, action_id: String) {
+    println!("{} :: {}", controller_id, action_id);
+
+    let action_id = action_id.to_ascii_lowercase();
 
     let button = match state.binary_string_input_converter.get(&action_id) {
         Some(button) => button,
         _ => {
-            return (StatusCode::BAD_REQUEST, "invalid input type").into_response();
+            println!("invalid input type");
+            return;
         }
     };
 
     let mut virtual_targets = match state.virtual_targets.lock() {
         Ok(targets) => targets,
         _ => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "failed to lock controllers",
-            )
-                .into_response();
+            println!("failed to lock controllers");
+            return;
         }
     };
 
-    let current_target = match virtual_targets.get_mut(&payload.controller_id) {
+    let current_target = match virtual_targets.get_mut(&controller_id) {
         Some(target) => target,
         _ => {
-            return (StatusCode::BAD_REQUEST, "invalid controller id").into_response();
+            println!("invalid controller id");
+            return;
         }
     };
 
     let gamepad = XGamepad {
         buttons: XButtons(button.clone()),
+        thumb_lx: 32767,
         ..Default::default()
     };
 
     match current_target.update(&gamepad) {
         Ok(_) => {}
         _ => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "unable to update controller",
-            )
-                .into_response();
+            println!("unable to update controller");
+            return;
         }
     }
 
@@ -118,13 +154,8 @@ pub async fn handle_action(
     match current_target.update(&state.gamepad_off) {
         Ok(_) => {}
         _ => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "unable to update controller",
-            )
-                .into_response();
+            println!("unable to update controller");
+            return;
         }
     }
-
-    return StatusCode::NO_CONTENT.into_response();
 }
