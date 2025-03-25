@@ -1,32 +1,30 @@
 use std::{net::SocketAddr, sync::Arc, thread::sleep, time::Duration};
 
 use axum::{
-    extract::{ws::{Message, WebSocket}, ConnectInfo, State, WebSocketUpgrade},
+    extract::{ws::WebSocket, ConnectInfo, State, WebSocketUpgrade},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use itertools::Itertools;
 use nanoid::nanoid;
 use tokio::spawn;
-use vigem_client::{TargetId, XButtons, XGamepad, Xbox360Wired};
+use vigem_client::{TargetId, XGamepad, Xbox360Wired};
 
-use super::models::{appstate::AppState, requests::CreateControllersRequest};
+use crate::api::utils::ClampAdd;
+
+use super::models::{
+    appstate::AppState,
+    error::Error,
+    requests::{CreateControllersRequest, HandleActionRequest},
+    virtual_target::VirtualTarget,
+};
 
 pub async fn create_controllers(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateControllersRequest>,
-) -> Response {
-    let mut virtual_targets = match state.virtual_targets.lock() {
-        Ok(targets) => targets,
-        _ => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "failed to reset existing controllers",
-            )
-                .into_response();
-        }
-    };
-
+) -> Result<Response, Error> {
+    let mut virtual_targets = state.virtual_targets.lock()?;
     virtual_targets.clear();
 
     let mut controller_ids: Vec<String> = Vec::with_capacity(payload.number_of_controllers.into());
@@ -35,31 +33,30 @@ pub async fn create_controllers(
         let new_target = Xbox360Wired::new(state.client.clone(), TargetId::XBOX360_WIRED);
 
         controller_ids.push(controller_id.clone());
-        virtual_targets.insert(controller_id, new_target);
+        virtual_targets.insert(
+            controller_id,
+            VirtualTarget {
+                controller: new_target,
+                state: XGamepad::default(),
+            },
+        );
     }
 
-    for controller in virtual_targets.values_mut() {
-        match controller.plugin() {
-            Ok(_) => {}
-            _ => {
-                virtual_targets.clear();
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "failed to initialize controllers",
-                )
-                    .into_response();
-            }
+    for target in virtual_targets.values_mut() {
+        if let Err(e) = target.controller.plugin() {
+            virtual_targets.clear();
+            return Err(Error::from(e));
         };
     }
 
-    (StatusCode::OK, Json(controller_ids)).into_response()
+    Ok((StatusCode::OK, Json(controller_ids)).into_response())
 }
 
-pub async fn get_controller_ids(State(state): State<Arc<AppState>>) -> Json<Vec<String>> {
-    match state.controller_ids.lock() {
-        Ok(result) => Json(result.clone()),
-        _ => Json(Vec::new()),
-    }
+pub async fn get_controller_ids(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<String>>, Error> {
+    let controller_ids = state.controller_ids.lock()?;
+    Ok(Json(controller_ids.clone()))
 }
 
 pub async fn ws_controller_handler(
@@ -79,83 +76,84 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 Ok(t) => t,
                 _ => {
                     println!("unable to convert message to text");
-                    return;
+                    continue;
                 }
             };
 
-            let mut msg_parts = text.split("::");
-
-            let controller_id = match msg_parts.next() {
-                Some(t) => String::from(t),
-                _ => {
-                    println!("unable to find controller_id");
-                    return;
+            let request = match serde_json::from_str::<HandleActionRequest>(&text) {
+                Ok(r) => r,
+                _ =>  {
+                    println!("unable to deserialize message");
+                    continue;
                 }
             };
 
-            let action_id = match msg_parts.next() {
-                Some(t) => String::from(t),
-                _ => {
-                    println!("unable to find action_id");
-                    return;
-                }
+            if let Some(e) = handle_action(state.clone(), request).await.err() {
+                println!("{e}");
             };
-
-            handle_action(state.clone(), controller_id, action_id).await;
         }
     });
 }
 
-pub async fn handle_action(state: Arc<AppState>, controller_id: String, action_id: String) {
-    println!("{} :: {}", controller_id, action_id);
+pub async fn handle_action(
+    state: Arc<AppState>,
+    request: HandleActionRequest,
+) -> Result<(), Error> {
+    println!(
+        "{} :: [{}]",
+        request.controller_id,
+        request.action_ids.join(" | ").to_ascii_lowercase()
+    );
 
-    let action_id = action_id.to_ascii_lowercase();
+    let mut virtual_targets = state.virtual_targets.lock()?;
 
-    let button = match state.binary_string_input_converter.get(&action_id) {
-        Some(button) => button,
-        _ => {
-            println!("invalid input type");
-            return;
-        }
-    };
+    let current_target =
+        virtual_targets
+            .get_mut(&request.controller_id)
+            .ok_or(Error::OptionRetrieveError(
+                "failed to get current_target from virtual_targets".into(),
+            ))?;
 
-    let mut virtual_targets = match state.virtual_targets.lock() {
-        Ok(targets) => targets,
-        _ => {
-            println!("failed to lock controllers");
-            return;
-        }
-    };
-
-    let current_target = match virtual_targets.get_mut(&controller_id) {
-        Some(target) => target,
-        _ => {
-            println!("invalid controller id");
-            return;
-        }
-    };
-
-    let gamepad = XGamepad {
-        buttons: XButtons(button.clone()),
-        thumb_lx: 32767,
-        ..Default::default()
-    };
-
-    match current_target.update(&gamepad) {
-        Ok(_) => {}
-        _ => {
-            println!("unable to update controller");
-            return;
+    for action_id in request.action_ids.clone() {
+        if let Some(button) = state.binary_string_input_converter.get(&action_id) {
+            current_target.state.buttons.raw |= button;
         }
     }
+
+    current_target
+        .state
+        .left_trigger
+        .clamp_add(request.triggers.left);
+    current_target
+        .state
+        .right_trigger
+        .clamp_add(request.triggers.right);
+    current_target
+        .state
+        .thumb_lx
+        .clamp_add(request.left_stick.x);
+    current_target
+        .state
+        .thumb_ly
+        .clamp_add(request.left_stick.y);
+    current_target
+        .state
+        .thumb_rx
+        .clamp_add(request.right_stick.x);
+    current_target
+        .state
+        .thumb_ry
+        .clamp_add(request.right_stick.y);
+
+    current_target.controller.update(&current_target.state)?;
 
     sleep(Duration::from_millis(50));
 
-    match current_target.update(&state.gamepad_off) {
-        Ok(_) => {}
-        _ => {
-            println!("unable to update controller");
-            return;
+    for action_id in request.action_ids {
+        if let Some(button) = state.binary_string_input_converter.get(&action_id) {
+            current_target.state.buttons.raw -= button;
         }
     }
+    current_target.controller.update(&current_target.state)?;
+    Ok(())
 }

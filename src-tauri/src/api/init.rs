@@ -12,9 +12,9 @@ use axum::{
 use tokio::net::TcpListener;
 use tower_http::{
     cors::CorsLayer,
-    services::{ServeDir, ServeFile}
+    services::{ServeDir, ServeFile},
 };
-use vigem_client::{Client, XButtons, XGamepad};
+use vigem_client::{Client, XButtons};
 
 use super::{
     handlers::{create_controllers, get_controller_ids, ws_controller_handler},
@@ -24,6 +24,7 @@ use super::{
 #[tokio::main]
 pub async fn run() {
     let client = Client::connect().unwrap();
+
     let binary_string_input_converter: HashMap<String, u16> = HashMap::from([
         (String::from("a"), XButtons::A),
         (String::from("b"), XButtons::B),
@@ -46,7 +47,6 @@ pub async fn run() {
         controller_ids: Mutex::new(Vec::new()),
         virtual_targets: Mutex::new(HashMap::new()),
         binary_string_input_converter: Arc::new(binary_string_input_converter),
-        gamepad_off: Arc::new(XGamepad::default()),
     });
 
     let app = Router::new()
