@@ -1,23 +1,30 @@
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     sync::{Arc, Mutex},
 };
 
 use axum::{
-    routing::{get, post},
+    routing::{any, get, post},
     Router,
 };
-use tower_http::cors::CorsLayer;
-use vigem_client::{Client, XButtons, XGamepad};
+
+use tokio::net::TcpListener;
+use tower_http::{
+    cors::CorsLayer,
+    services::{ServeDir, ServeFile},
+};
+use vigem_client::{Client, XButtons};
 
 use super::{
-    handlers::{create_controllers, get_controller_ids, handle_action},
+    handlers::{create_controllers, get_controller_ids, ws_controller_handler},
     models::appstate::AppState,
 };
 
 #[tokio::main]
 pub async fn run() {
     let client = Client::connect().unwrap();
+
     let binary_string_input_converter: HashMap<String, u16> = HashMap::from([
         (String::from("a"), XButtons::A),
         (String::from("b"), XButtons::B),
@@ -40,16 +47,22 @@ pub async fn run() {
         controller_ids: Mutex::new(Vec::new()),
         virtual_targets: Mutex::new(HashMap::new()),
         binary_string_input_converter: Arc::new(binary_string_input_converter),
-        gamepad_off: Arc::new(XGamepad::default()),
     });
 
     let app = Router::new()
         .route("/controllers", get(get_controller_ids))
         .route("/controllers", post(create_controllers))
-        .route("/controllers/input", post(handle_action))
+        .route("/ws", any(ws_controller_handler))
+        .route_service("/", ServeFile::new("public/index.html"))
+        .nest_service("/public", ServeDir::new("public"))
         .layer(CorsLayer::very_permissive())
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
