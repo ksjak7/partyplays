@@ -7,11 +7,11 @@ pub enum Error {
     #[error("vigem_client failure :: {0}")]
     VigemClient(#[from] vigem_client::Error),
     #[error("poison_error :: {0}")]
-    StateAccessError(String),
+    StateAccess(String),
     #[error("failed to get value from option :: {0}")]
-    OptionRetrieveError(String),
+    OptionRetrieve(String),
     #[error("failed on int conversion :: {0}")]
-    TryFromIntError(#[from] num::TryFromIntError)
+    TryFromInt(#[from] num::TryFromIntError),
 }
 
 impl IntoResponse for Error {
@@ -22,6 +22,6 @@ impl IntoResponse for Error {
 
 impl<T> From<PoisonError<T>> for Error {
     fn from(value: PoisonError<T>) -> Self {
-        Self::StateAccessError(String::from(value.to_string()))
+        Self::StateAccess(value.to_string())
     }
 }

@@ -80,7 +80,7 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
             let request = match serde_json::from_str::<HandleActionRequest>(&text) {
                 Ok(r) => r,
-                Err(e) =>  {
+                Err(e) => {
                     println!("unable to deserialize message :: {e}");
                     continue;
                 }
@@ -102,7 +102,7 @@ pub async fn handle_action(
     let current_target =
         virtual_targets
             .get_mut(&request.controller_id)
-            .ok_or(Error::OptionRetrieveError(
+            .ok_or(Error::OptionRetrieve(
                 "failed to get current_target from virtual_targets".into(),
             ))?;
 
@@ -112,12 +112,14 @@ pub async fn handle_action(
         }
     }
 
-    current_target.state.thumb_lx = request.left_stick.x.min(100).max(-100) * 300;
-    current_target.state.thumb_ly = request.left_stick.y.min(100).max(-100) * 300;
-    current_target.state.thumb_rx = request.right_stick.x.min(100).max(-100) * 300;
-    current_target.state.thumb_ry = request.right_stick.y.min(100).max(-100) * 300;
-    current_target.state.left_trigger = (f32::from(request.triggers.left.min(100).max(0)) * 2.55).ceil() as u8;
-    current_target.state.right_trigger = (f32::from(request.triggers.right.min(100).max(0)) * 2.55).ceil() as u8;
+    current_target.state.thumb_lx = request.left_stick.x.clamp(-100, 100) * 300;
+    current_target.state.thumb_ly = request.left_stick.y.clamp(-100, 100) * 300;
+    current_target.state.thumb_rx = request.right_stick.x.clamp(-100, 100) * 300;
+    current_target.state.thumb_ry = request.right_stick.y.clamp(-100, 100) * 300;
+    current_target.state.left_trigger =
+        (f32::from(request.triggers.left.clamp(0, 100)) * 2.55).ceil() as u8;
+    current_target.state.right_trigger =
+        (f32::from(request.triggers.right.clamp(0, 100)) * 2.55).ceil() as u8;
 
     current_target.controller.update(&current_target.state)?;
 
