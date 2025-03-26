@@ -6,12 +6,10 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use itertools::Itertools;
+
 use nanoid::nanoid;
 use tokio::spawn;
 use vigem_client::{TargetId, XGamepad, Xbox360Wired};
-
-use crate::api::utils::ClampAdd;
 
 use super::models::{
     appstate::AppState,
@@ -82,8 +80,8 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
             let request = match serde_json::from_str::<HandleActionRequest>(&text) {
                 Ok(r) => r,
-                _ =>  {
-                    println!("unable to deserialize message");
+                Err(e) =>  {
+                    println!("unable to deserialize message :: {e}");
                     continue;
                 }
             };
@@ -99,12 +97,6 @@ pub async fn handle_action(
     state: Arc<AppState>,
     request: HandleActionRequest,
 ) -> Result<(), Error> {
-    println!(
-        "{} :: [{}]",
-        request.controller_id,
-        request.action_ids.join(" | ").to_ascii_lowercase()
-    );
-
     let mut virtual_targets = state.virtual_targets.lock()?;
 
     let current_target =
@@ -120,30 +112,12 @@ pub async fn handle_action(
         }
     }
 
-    current_target
-        .state
-        .left_trigger
-        .clamp_add(request.triggers.left);
-    current_target
-        .state
-        .right_trigger
-        .clamp_add(request.triggers.right);
-    current_target
-        .state
-        .thumb_lx
-        .clamp_add(request.left_stick.x);
-    current_target
-        .state
-        .thumb_ly
-        .clamp_add(request.left_stick.y);
-    current_target
-        .state
-        .thumb_rx
-        .clamp_add(request.right_stick.x);
-    current_target
-        .state
-        .thumb_ry
-        .clamp_add(request.right_stick.y);
+    current_target.state.thumb_lx = request.left_stick.x.min(100).max(-100) * 300;
+    current_target.state.thumb_ly = request.left_stick.y.min(100).max(-100) * 300;
+    current_target.state.thumb_rx = request.right_stick.x.min(100).max(-100) * 300;
+    current_target.state.thumb_ry = request.right_stick.y.min(100).max(-100) * 300;
+    current_target.state.left_trigger = (f32::from(request.triggers.left.min(100).max(0)) * 2.55).ceil() as u8;
+    current_target.state.right_trigger = (f32::from(request.triggers.right.min(100).max(0)) * 2.55).ceil() as u8;
 
     current_target.controller.update(&current_target.state)?;
 
