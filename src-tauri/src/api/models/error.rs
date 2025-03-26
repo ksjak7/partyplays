@@ -1,4 +1,4 @@
-use std::sync::PoisonError;
+use std::{num, sync::PoisonError};
 
 use axum::{http::StatusCode, response::IntoResponse};
 
@@ -10,6 +10,8 @@ pub enum Error {
     StateAccessError(String),
     #[error("failed to get value from option :: {0}")]
     OptionRetrieveError(String),
+    #[error("failed on int conversion :: {0}")]
+    TryFromIntError(#[from] num::TryFromIntError)
 }
 
 impl IntoResponse for Error {
