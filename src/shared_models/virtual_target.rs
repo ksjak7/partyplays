@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use vigem_client::{Client, XGamepad, Xbox360Wired};
 
 pub struct VirtualTarget {

@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 use super::input::{StickInput, TriggerInput};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct HandleActionRequest {

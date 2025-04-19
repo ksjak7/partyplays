@@ -1,6 +1,5 @@
-use std::{num, sync::PoisonError};
-
 use axum::{http::StatusCode, response::IntoResponse};
+use std::{num, sync::PoisonError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

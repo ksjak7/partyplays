@@ -1,52 +1,14 @@
-use std::{net::SocketAddr, sync::Arc, thread::sleep, time::Duration};
-
+use crate::api::models::requests::HandleActionRequest;
+use crate::shared_models::{error::Error, shared_state::SharedState};
 use axum::{
     extract::{ws::WebSocket, ConnectInfo, State, WebSocketUpgrade},
     response::IntoResponse,
 };
-
-use nanoid::nanoid;
+use std::{net::SocketAddr, sync::Arc, thread::sleep, time::Duration};
 use tokio::spawn;
-use vigem_client::{TargetId, XGamepad, Xbox360Wired};
-
-use super::models::{
-    apistate::ApiState, error::Error, requests::HandleActionRequest, virtual_target::VirtualTarget,
-};
-
-pub fn create_controllers(state: Arc<ApiState>, number_of_controllers: usize) -> Result<(), Error> {
-    let mut virtual_targets = state.virtual_targets.write()?;
-    virtual_targets.clear();
-
-    let mut controller_ids: Vec<String> = Vec::with_capacity(number_of_controllers);
-    for _ in 0..number_of_controllers {
-        let controller_id = nanoid!(6);
-        let new_target = Xbox360Wired::new(state.client.clone(), TargetId::XBOX360_WIRED);
-
-        controller_ids.push(controller_id.clone());
-        virtual_targets.insert(
-            controller_id,
-            VirtualTarget {
-                controller: new_target,
-                state: XGamepad::default(),
-            },
-        );
-    }
-
-    for target in virtual_targets.values_mut() {
-        if let Err(e) = target.controller.plugin() {
-            virtual_targets.clear();
-            return Err(Error::from(e));
-        };
-    }
-
-    let mut writable_controller_ids = state.controller_ids.write()?;
-    writable_controller_ids.clear();
-    writable_controller_ids.append(&mut controller_ids);
-    Ok(())
-}
 
 pub async fn ws_controller_handler(
-    State(state): State<Arc<ApiState>>,
+    State(state): State<Arc<SharedState>>,
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
@@ -55,7 +17,7 @@ pub async fn ws_controller_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-pub async fn handle_socket(mut socket: WebSocket, state: Arc<ApiState>) {
+pub async fn handle_socket(mut socket: WebSocket, state: Arc<SharedState>) {
     spawn(async move {
         while let Some(Ok(msg)) = socket.recv().await {
             let text = match msg.into_text() {
@@ -82,7 +44,7 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<ApiState>) {
 }
 
 pub async fn handle_action(
-    state: Arc<ApiState>,
+    state: Arc<SharedState>,
     request: HandleActionRequest,
 ) -> Result<(), Error> {
     let mut virtual_targets = state.virtual_targets.write()?;
