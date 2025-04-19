@@ -1,4 +1,4 @@
-pub mod appstate;
+pub mod apistate;
 pub mod error;
 pub mod input;
 pub mod requests;

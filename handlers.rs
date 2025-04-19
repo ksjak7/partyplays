@@ -2,9 +2,7 @@ use std::{net::SocketAddr, sync::Arc, thread::sleep, time::Duration};
 
 use axum::{
     extract::{ws::WebSocket, ConnectInfo, State, WebSocketUpgrade},
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
+    response::IntoResponse,
 };
 
 use nanoid::nanoid;
@@ -12,21 +10,15 @@ use tokio::spawn;
 use vigem_client::{TargetId, XGamepad, Xbox360Wired};
 
 use super::models::{
-    appstate::AppState,
-    error::Error,
-    requests::{CreateControllersRequest, HandleActionRequest},
-    virtual_target::VirtualTarget,
+    apistate::ApiState, error::Error, requests::HandleActionRequest, virtual_target::VirtualTarget,
 };
 
-pub async fn create_controllers(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<CreateControllersRequest>,
-) -> Result<Response, Error> {
-    let mut virtual_targets = state.virtual_targets.lock()?;
+pub fn create_controllers(state: Arc<ApiState>, number_of_controllers: usize) -> Result<(), Error> {
+    let mut virtual_targets = state.virtual_targets.write()?;
     virtual_targets.clear();
 
-    let mut controller_ids: Vec<String> = Vec::with_capacity(payload.number_of_controllers.into());
-    for _ in 0..payload.number_of_controllers {
+    let mut controller_ids: Vec<String> = Vec::with_capacity(number_of_controllers);
+    for _ in 0..number_of_controllers {
         let controller_id = nanoid!(6);
         let new_target = Xbox360Wired::new(state.client.clone(), TargetId::XBOX360_WIRED);
 
@@ -47,18 +39,14 @@ pub async fn create_controllers(
         };
     }
 
-    Ok((StatusCode::OK, Json(controller_ids)).into_response())
-}
-
-pub async fn get_controller_ids(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<String>>, Error> {
-    let controller_ids = state.controller_ids.lock()?;
-    Ok(Json(controller_ids.clone()))
+    let mut writable_controller_ids = state.controller_ids.write()?;
+    writable_controller_ids.clear();
+    writable_controller_ids.append(&mut controller_ids);
+    Ok(())
 }
 
 pub async fn ws_controller_handler(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<ApiState>>,
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
@@ -67,7 +55,7 @@ pub async fn ws_controller_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+pub async fn handle_socket(mut socket: WebSocket, state: Arc<ApiState>) {
     spawn(async move {
         while let Some(Ok(msg)) = socket.recv().await {
             let text = match msg.into_text() {
@@ -94,10 +82,10 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 }
 
 pub async fn handle_action(
-    state: Arc<AppState>,
+    state: Arc<ApiState>,
     request: HandleActionRequest,
 ) -> Result<(), Error> {
-    let mut virtual_targets = state.virtual_targets.lock()?;
+    let mut virtual_targets = state.virtual_targets.write()?;
 
     let current_target =
         virtual_targets
