@@ -5,13 +5,16 @@ use std::sync::Arc;
 
 pub async fn start(state: Arc<SharedState>) -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_maximize_button(false)
+            .with_resizable(false)
+            .with_inner_size([520.0, 420.0]),
         ..Default::default()
     };
 
     eframe::run_native(
         "PartyPlays",
         options,
-        Box::new(|_| Ok(Box::new(PartyPlaysApp::new(state)))),
+        Box::new(|cc| Ok(Box::new(PartyPlaysApp::new(cc, state)))),
     )
 }

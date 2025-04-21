@@ -17,9 +17,11 @@ pub async fn start(state: Arc<SharedState>) {
         .route_service("/", ServeFile::new("public/index.html"))
         .nest_service("/public", ServeDir::new("public"))
         .layer(CorsLayer::very_permissive())
-        .with_state(state);
+        .with_state(state.clone());
 
-    let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    let listener = TcpListener::bind(state.local_ip_address.clone())
+        .await
+        .unwrap();
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),

@@ -1,19 +1,23 @@
 use super::virtual_target::VirtualTarget;
+use local_ip_address::local_ip;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 use vigem_client::{Client, XButtons};
+
 pub struct SharedState {
+    pub local_ip_address: String,
     pub client: Arc<Client>,
     pub controller_ids: RwLock<Vec<String>>,
     pub virtual_targets: RwLock<HashMap<String, VirtualTarget>>,
-    pub binary_string_input_converter: Arc<HashMap<String, u16>>,
+    pub binary_string_input_converter: HashMap<String, u16>,
 }
 
 impl SharedState {
     pub fn new_arc() -> Arc<Self> {
-        let client = Client::connect().unwrap();
+        let local_ip_address: String = format!("{}:3000", local_ip().unwrap());
+        let client = Arc::new(Client::connect().unwrap());
 
         let binary_string_input_converter: HashMap<String, u16> = HashMap::from([
             (String::from("a"), XButtons::A),
@@ -33,10 +37,11 @@ impl SharedState {
         ]);
 
         Arc::new(SharedState {
-            client: Arc::new(client),
+            local_ip_address,
+            client,
             controller_ids: RwLock::new(Vec::new()),
             virtual_targets: RwLock::new(HashMap::new()),
-            binary_string_input_converter: Arc::new(binary_string_input_converter),
+            binary_string_input_converter,
         })
     }
 }
