@@ -1,5 +1,6 @@
 use crate::api::models::requests::HandleActionRequest;
 use crate::shared_models::{error::Error, shared_state::SharedState};
+use axum::http::StatusCode;
 use axum::{
     extract::{ws::WebSocket, ConnectInfo, State, WebSocketUpgrade},
     response::IntoResponse,
@@ -7,6 +8,9 @@ use axum::{
 use std::{net::SocketAddr, sync::Arc, thread::sleep, time::Duration};
 use tokio::spawn;
 
+pub async fn health_handler() -> impl IntoResponse {
+    (StatusCode::OK, "Healthy").into_response()
+}
 pub async fn ws_controller_handler(
     State(state): State<Arc<SharedState>>,
     ws: WebSocketUpgrade,
@@ -59,6 +63,7 @@ pub async fn handle_action(
     for action_id in request.action_ids.clone() {
         if let Some(button) = state.binary_string_input_converter.get(&action_id) {
             current_target.state.buttons.raw |= button;
+            current_target.ui_buttons_pressed |= button;
         }
     }
 
@@ -80,6 +85,7 @@ pub async fn handle_action(
             current_target.state.buttons.raw -= button;
         }
     }
+
     current_target.controller.update(&current_target.state)?;
     Ok(())
 }

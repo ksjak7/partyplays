@@ -9,8 +9,9 @@ pub fn create_controllers(
     state: Arc<SharedState>,
     number_of_controllers: usize,
 ) -> Result<(), Error> {
+    clear_targets_and_controllers(state.clone())?;
+
     let mut virtual_targets = state.virtual_targets.write()?;
-    virtual_targets.clear();
 
     let mut controller_ids: Vec<String> = Vec::with_capacity(number_of_controllers);
     for _ in 0..number_of_controllers {
@@ -23,6 +24,7 @@ pub fn create_controllers(
             VirtualTarget {
                 controller: new_target,
                 state: XGamepad::default(),
+                ui_buttons_pressed: u16::default(),
             },
         );
     }
@@ -35,7 +37,15 @@ pub fn create_controllers(
     }
 
     let mut writable_controller_ids = state.controller_ids.write()?;
-    writable_controller_ids.clear();
     writable_controller_ids.append(&mut controller_ids);
+    Ok(())
+}
+
+pub fn clear_targets_and_controllers(state: Arc<SharedState>) -> Result<(), Error> {
+    let mut virtual_targets = state.virtual_targets.write()?;
+    virtual_targets.clear();
+
+    let mut controller_ids = state.controller_ids.write()?;
+    controller_ids.clear();
     Ok(())
 }

@@ -16,7 +16,14 @@ pub struct SharedState {
 
 impl SharedState {
     pub fn new_arc() -> Arc<Self> {
-        let local_ip_address: String = format!("{}:3000", local_ip().unwrap());
+        let local_ip_address: String = if cfg!(debug_assertions) {
+            println!("debug worked");
+            "0.0.0.0:3000".into()
+        } else {
+            format!("{}:3000", local_ip().unwrap())
+        };
+        println!("Hosting at {}", local_ip_address);
+
         let client = Arc::new(Client::connect().unwrap());
 
         let binary_string_input_converter: HashMap<String, u16> = HashMap::from([

@@ -5,10 +5,7 @@ use std::sync::Arc;
 
 pub async fn start(state: Arc<SharedState>) -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_maximize_button(false)
-            .with_resizable(false)
-            .with_inner_size([520.0, 420.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([932.0, 320.0]),
         ..Default::default()
     };
 

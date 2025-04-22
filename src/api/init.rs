@@ -1,6 +1,9 @@
 use super::handlers::ws_controller_handler;
-use crate::shared_models::shared_state::SharedState;
-use axum::{routing::any, Router};
+use crate::{api::handlers::health_handler, shared_models::shared_state::SharedState};
+use axum::{
+    routing::{any, get},
+    Router,
+};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -13,6 +16,7 @@ pub async fn start(state: Arc<SharedState>) {
     println!("initializing router");
 
     let app = Router::new()
+        .route("/health", get(health_handler))
         .route("/ws", any(ws_controller_handler))
         .route_service("/", ServeFile::new("public/index.html"))
         .nest_service("/public", ServeDir::new("public"))
