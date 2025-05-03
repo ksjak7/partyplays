@@ -1,12 +1,12 @@
-import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { defineConfig } from "vite";
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte()],
-  base: 'public',
+  base: "public",
   build: {
-    outDir: '../src-tauri/public',
+    outDir: "../public",
     emptyOutDir: true,
-  }
-})
+  },
+});

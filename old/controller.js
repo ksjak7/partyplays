@@ -38,7 +38,7 @@ function rotation_handler() {
 
 function establishConnection() {
   if (!intervalId) {
-    websocket = new WebSocket(`ws://${location.host}/ws`);
+    websocket = new WebSocket(`ws://192.168.0.66:3000/ws`); //new WebSocket(`ws://${location.host}/ws`);
     websocket.onopen = () => {
       console.log("ready");
       intervalId = setInterval(sendInput, 250);
