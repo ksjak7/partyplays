@@ -2,7 +2,7 @@ use crate::api::models::requests::HandleActionRequest;
 use crate::shared_models::{error::Error, shared_state::SharedState};
 use axum::http::StatusCode;
 use axum::{
-    extract::{ws::WebSocket, ConnectInfo, State, WebSocketUpgrade},
+    extract::{ConnectInfo, State, WebSocketUpgrade, ws::WebSocket},
     response::IntoResponse,
 };
 use std::{net::SocketAddr, sync::Arc, thread::sleep, time::Duration};

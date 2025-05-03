@@ -1,8 +1,8 @@
 use super::handlers::ws_controller_handler;
 use crate::{api::handlers::health_handler, shared_models::shared_state::SharedState};
 use axum::{
-    routing::{any, get},
     Router,
+    routing::{any, get},
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
